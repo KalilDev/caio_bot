@@ -31,7 +31,7 @@ class BotOrchestratorBloc extends Bloc<BotOrchestratorEvent, BotOrchestratorStat
     String id = prefs.getString('lastTweetID');
     if (id == null) {
       // TODO: add this call to the stats
-      final Response r = await authenticate().request('GET', 'statuses/user_timeline.json?screen_name=caiolucio54&count=1');
+      final Response r = await authenticate().request('GET', 'statuses/user_timeline.json?screen_name=caiolucio54&count=5');
       final List<Tweet> tweets = (json.decode(r.body) as List).map((dynamic d)=>Tweet.fromJson(d as Map<String, dynamic>)).toList();
       final String last = tweets.last.idStr;
       prefs.setString('lastTweetID', last);
@@ -43,7 +43,7 @@ class BotOrchestratorBloc extends Bloc<BotOrchestratorEvent, BotOrchestratorStat
   Future<String> getLatestID() async {
     // Get it from the network ALWAYS
     // TODO: add this call to the stats
-    final Response r = await authenticate().request('GET', 'statuses/user_timeline.json?screen_name=caiolucio54&count=5');
+    final Response r = await authenticate().request('GET', 'statuses/user_timeline.json?screen_name=caiolucio54&count=1');
     final List<Tweet> tweets = (json.decode(r.body) as List).map((dynamic d)=>Tweet.fromJson(d as Map<String, dynamic>)).toList();
     return tweets.first.idStr;
   }
@@ -84,14 +84,12 @@ class BotOrchestratorBloc extends Bloc<BotOrchestratorEvent, BotOrchestratorStat
     return tweets;
   }
 
-  // TODO: FIX THIS!!!
   List<String> processTweets(List<Tweet> tweets) {
     final List<String> processed = [];
     // This bot will only act in retweets. Every time our victim retweets
     // something, the bot will comment a message in the retweet.
     for (Tweet t in tweets) {
-      print(t.toString());
-      if (t.retweetedStatus != null) {
+      if (t.isQuoteStatus) {
         // Time for action
         processed.add(t.idStr);
       }
@@ -102,9 +100,7 @@ class BotOrchestratorBloc extends Bloc<BotOrchestratorEvent, BotOrchestratorStat
   Future<void> sendTweets(List<String> tgtTweets) async {
     for (String tweet in tgtTweets) {
       // Post this tweet
-      final Response r = await authenticate().request('POST', 'statuses/user_timeline.json?status=chacota&auto_populate_reply_metadata=true&in_reply_to_status_id='+tweet);
-      print(r.body);
-      print(tweet);
+      final Response r = await authenticate().request('POST', 'statuses/update.json?status=chacota&auto_populate_reply_metadata=true&in_reply_to_status_id='+tweet);
     }
   }
 
@@ -125,9 +121,7 @@ class BotOrchestratorBloc extends Bloc<BotOrchestratorEvent, BotOrchestratorStat
     final String latestTweetID = await getLatestID();
     if (latestTweetID != lastTweetID) {
       final List<Tweet> nonProcessedTweets = await getTweetsBetween(lastTweetID, latestTweetID);
-      print(nonProcessedTweets);
       final List<String> pending = processTweets(nonProcessedTweets);
-      print(pending);
       return add(BotOrchestratorUpdate(pending: pending, lastTweet: latestTweetID));
     }
     add(BotOrchestratorUpdate(lastTweet: latestTweetID));
@@ -152,7 +146,7 @@ class BotOrchestratorBloc extends Bloc<BotOrchestratorEvent, BotOrchestratorStat
       _scheduledAction();
     }
     if (event is BotOrchestratorUpdate) {
-      if (event.pending != null || event.pending.isNotEmpty) {
+      if (!(event.pending == null || event.pending.isEmpty)) {
         // We need to send these tweets!
         await sendTweets(event.pending);
       }
